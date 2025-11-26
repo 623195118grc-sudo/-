@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>简易放置游戏</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      display: flex;
+      justify-content: center;
+    }
+    .container {
+      max-width: 960px;
+      width: 100%;
+      padding: 24px;
+    }
+    h1 {
+      margin-top: 0;
+      text-align: center;
+      color: #facc15;
+    }
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .card {
+      background: #020617;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      flex: 1;
+      min-width: 220px;
+    }
+    .label {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #9ca3af;
+      letter-spacing: 0.05em;
+    }
+    .value {
+      font-size: 24px;
+      font-weight: bold;
+      margin-top: 4px;
+    }
+    .btn {
+      padding: 10px 16px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      margin-top: 8px;
+      background: #22c55e;
+      color: #022c22;
+      box-shadow: 0 5px 15px rgba(34,197,94,0.4);
+      transition: transform 0.05s ease, box-shadow 0.05s ease, opacity 0.2s;
+    }
+    .btn:active {
+      transform: translateY(1px) scale(0.98);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+    }
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    .btn-secondary {
+      background: #0ea5e9;
+      color: #0b1120;
+      box-shadow: 0 5px 15px rgba(14,165,233,0.4);
+    }
+    .section-title {
+      margin: 24px 0 8px;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .upgrades {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .upgrade-card {
+      background: #020617;
+      border-radius: 12px;
+      padding: 12px 14px;
+      border: 1px solid rgba(148,163,184,0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .upgrade-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .upgrade-name {
+      font-weight: 600;
+      font-size: 15px;
+    }
+    .upgrade-count {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+    .upgrade-info {
+      font-size: 12px;
+      color: #cbd5f5;
+    }
+    .footer {
+      margin-top: 24px;
+      font-size: 12px;
+      color: #6b7280;
+      text-align: center;
+    }
+    a {
+      color: #38bdf8;
+    }
+    .small {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>黄金矿脉 · 放置游戏 DEMO</h1>
+
+    <!-- 顶部统计 -->
+    <div class="stats">
+      <div class="card">
+        <div class="label">当前金币</div>
+        <div class="value" id="gold">0</div>
+        <div class="small">刷新不会丢档，自动保存</div>
+      </div>
+      <div class="card">
+        <div class="label">每秒产量 (自动)</div>
+        <div class="value" id="gps">0 / 秒</div>
+        <div class="small">越多建筑，挂机越快</div>
+      </div>
+      <div class="card">
+        <div class="label">每次点击收益</div>
+        <div class="value" id="gpc">1 / 点击</div>
+        <button id="clickBtn" class="btn">挖一次（点我）</button>
+      </div>
+    </div>
+
+    <!-- 升级区 -->
+    <div class="section-title">
+      <span>自动生产建筑</span>
+      <button id="resetBtn" class="btn btn-secondary" style="font-size:12px;padding:6px 12px;">
+        清空存档（重新开始）
+      </button>
+    </div>
+
+    <div class="upgrades" id="upgrades"></div>
+
+    <div class="section-title">
+      <span>被动加成升级（可选）</span>
+    </div>
+    <div class="upgrades" id="boosts"></div>
+
+    <div class="footer">
+      简易 DEMO · 你可以自由修改源码的数值和逻辑，让它变成你自己的放置游戏版本。
+    </div>
+  </div>
+
+  <script>
+    // ==============================
+    // 一些可调的配置（你可以随便改）
+    // ==============================
+    const SAVE_KEY = "simple_idle_game_save_v1";
+
+    const baseState = {
+      gold: 0,
+      goldPerClick: 1,
+      upgrades: [
+        {
+          id: "miner",
+          name: "矿工",
+          description: "喜欢加班的小矿工，每个提供 1 金币/秒。",
+          baseCost: 10,
+          quantity: 0,
+          gpsPerUnit: 1
+        },
+        {
+          id: "drill",
+          name: "钻井",
+          description: "高科技自动钻井，每个提供 10 金币/秒。",
+          baseCost: 100,
+          quantity: 0,
+          gpsPerUnit: 10
+        },
+        {
+          id: "lab",
+          name: "研究所",
+          description: "研究提升效率，每个提供 50 金币/秒。",
+          baseCost: 1000,
+          quantity: 0,
+          gpsPerUnit: 50
+        }
+      ],
+      boosts: [
+        {
+          id: "pickaxe",
+          name: "强化镐头",
+          description: "每级 +1 金币/点击。",
+          baseCost: 50,
+          level: 0,
+          gpcPerLevel: 1
+        },
+        {
+          id: "autoClick",
+          name: "自动点击器",
+          description: "每级 +0.5 次等效点击/秒。",
+          baseCost: 200,
+          level: 0,
+          clicksPerSecondPerLevel: 0.5
+        }
+      ]
+    };
+
+    // 当前游戏状态（初始化时尝试读取存档）
+    let state = loadGame();
+
+    // ================
+    // 工具函数
+    // ================
+    function formatNumber(num) {
+      if (num < 1000) return num.toFixed(0);
+      if (num < 1000000) return (num / 1000).toFixed(1) + "K";
+      if (num < 1000000000) return (num / 1e6).toFixed(1) + "M";
+      return (num / 1e9).toFixed(1) + "B";
+    }
+
+    function calcUpgradeCost(baseCost, quantity) {
+      // 典型放置游戏：每买一次价格 *1.15
+      return Math.floor(baseCost * Math.pow(1.15, quantity));
+    }
+
+    function calcGps(state) {
+      let totalGps = 0;
+      for (const u of state.upgrades) {
+        totalGps += u.quantity * u.gpsPerUnit;
+      }
+      // 自动点击器折算成 GPS： level * cps * gpc
+      const autoClickBoost = state.boosts.find(b => b.id === "autoClick");
+      if (autoClickBoost) {
+        const cps = autoClickBoost.level * autoClickBoost.clicksPerSecondPerLevel;
+        totalGps += cps * state.goldPerClick;
+      }
+      return totalGps;
+    }
+
+    // ================
+    // 存档相关
+    // ================
+    function saveGame() {
+      try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+      } catch (e) {
+        console.warn("存档失败：", e);
+      }
+    }
+
+    function loadGame() {
+      try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return structuredClone(baseState);
+        const loaded = JSON.parse(raw);
+
+        // 简单的兼容处理：把缺少的字段补上
+        const merged = structuredClone(baseState);
+        merged.gold = loaded.gold ?? baseState.gold;
+        merged.goldPerClick = loaded.goldPerClick ?? baseState.goldPerClick;
+
+        // 恢复 upgrades
+        if (Array.isArray(loaded.upgrades)) {
+          merged.upgrades.forEach(u => {
+            const match = loaded.upgrades.find(x => x.id === u.id);
+            if (match) {
+              u.quantity = match.quantity ?? u.quantity;
+            }
+          });
+        }
+
+        // 恢复 boosts
+        if (Array.isArray(loaded.boosts)) {
+          merged.boosts.forEach(b => {
+            const match = loaded.boosts.find(x => x.id === b.id);
+            if (match) {
+              b.level = match.level ?? b.level;
+            }
+          });
+        }
+
+        return merged;
+      } catch (e) {
+        console.warn("读取存档失败，使用默认初始状态：", e);
+        return structuredClone(baseState);
+      }
+    }
+
+    function resetGame() {
+      if (!confirm("确定要清空存档并重新开始吗？此操作不可撤销。")) return;
+      state = structuredClone(baseState);
+      saveGame();
+      render();
+    }
+
+    // ================
+    // UI 渲染
+    // ================
+    const goldEl = document.getElementById("gold");
+    const gpsEl = document.getElementById("gps");
+    const gpcEl = document.getElementById("gpc");
+    const upgradesContainer = document.getElementById("upgrades");
+    const boostsContainer = document.getElementById("boosts");
+    const clickBtn = document.getElementById("clickBtn");
+    const resetBtn = document.getElementById("resetBtn");
+
+    function render() {
+      goldEl.textContent = formatNumber(state.gold);
+      gpcEl.textContent = state.goldPerClick.toFixed(0) + " / 点击";
+      gpsEl.textContent = calcGps(state).toFixed(1) + " / 秒";
+
+      // 渲染自动建筑
+      upgradesContainer.innerHTML = "";
+      state.upgrades.forEach(u => {
+        const cost = calcUpgradeCost(u.baseCost, u.quantity);
+        const canBuy = state.gold >= cost;
+
+        const card = document.createElement("div");
+        card.className = "upgrade-card";
+
+        card.innerHTML = `
+          <div class="upgrade-header">
+            <div>
+              <div class="upgrade-name">${u.name}</div>
+              <div class="upgrade-count">数量：${u.quantity}</div>
+            </div>
+            <button class="btn btn-secondary buy-upgrade" data-id="${u.id}" ${canBuy ? "" : "disabled"}>
+              购买
+            </button>
+          </div>
+          <div class="upgrade-info">
+            <div>当前价格：<strong>${formatNumber(cost)}</strong> 金币</div>
+            <div>产量：每个 <strong>${u.gpsPerUnit}</strong> 金币/秒</div>
+            <div>${u.description}</div>
+          </div>
+        `;
+
+        upgradesContainer.appendChild(card);
+      });
+
+      // 渲染被动加成
+      boostsContainer.innerHTML = "";
+      state.boosts.forEach(b => {
+        let effectText = "";
+        if (b.id === "pickaxe") {
+          effectText = `每级 +${b.gpcPerLevel} 金币/点击`;
+        } else if (b.id === "autoClick") {
+          effectText = `每级 +${b.clicksPerSecondPerLevel} 次等效点击/秒`;
+        }
+        const cost = calcUpgradeCost(b.baseCost, b.level);
+        const canBuy = state.gold >= cost;
+
+        const card = document.createElement("div");
+        card.className = "upgrade-card";
+        card.innerHTML = `
+          <div class="upgrade-header">
+            <div>
+              <div class="upgrade-name">${b.name}</div>
+              <div class="upgrade-count">等级：${b.level}</div>
+            </div>
+            <button class="btn buy-boost" data-id="${b.id}" ${canBuy ? "" : "disabled"}>
+              升级
+            </button>
+          </div>
+          <div class="upgrade-info">
+            <div>当前价格：<strong>${formatNumber(cost)}</strong> 金币</div>
+            <div>效果：${effectText}</div>
+            <div>${b.description}</div>
+          </div>
+        `;
+        boostsContainer.appendChild(card);
+      });
+    }
+
+    // ================
+    // 交互逻辑
+    // ================
+    clickBtn.addEventListener("click", () => {
+      state.gold += state.goldPerClick;
+      render();
+    });
+
+    resetBtn.addEventListener("click", resetGame);
+
+    // 监听升级按钮点击（事件委托）
+    upgradesContainer.addEventListener("click", (e) => {
+      const btn = e.target.closest(".buy-upgrade");
+      if (!btn) return;
+      const id = btn.getAttribute("data-id");
+      const u = state.upgrades.find(x => x.id === id);
+      if (!u) return;
+
+      const cost = calcUpgradeCost(u.baseCost, u.quantity);
+      if (state.gold < cost) return;
+
+      state.gold -= cost;
+      u.quantity += 1;
+      saveGame();
+      render();
+    });
+
+    boostsContainer.addEventListener("click", (e) => {
+      const btn = e.target.closest(".buy-boost");
+      if (!btn) return;
+      const id = btn.getAttribute("data-id");
+      const b = state.boosts.find(x => x.id === id);
+      if (!b) return;
+
+      const cost = calcUpgradeCost(b.baseCost, b.level);
+      if (state.gold < cost) return;
+
+      state.gold -= cost;
+      b.level += 1;
+
+      if (b.id === "pickaxe") {
+        state.goldPerClick += b.gpcPerLevel;
+      }
+      // autoClick 的效果在 calcGps 里动态算
+
+      saveGame();
+      render();
+    });
+
+    // 每秒结算一次收益
+    setInterval(() => {
+      const gps = calcGps(state);
+      state.gold += gps;
+      render();
+    }, 1000);
+
+    // 定期自动存档
+    setInterval(() => {
+      saveGame();
+    }, 5000);
+
+    // 首次进入页面先渲染一次
+    render();
+  </script>
+</body>
+</html>
